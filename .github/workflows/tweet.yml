@@ -11,7 +11,7 @@ jobs:
       - uses: Eomm/why-don-t-you-tweet@v1
         if: ${{ !github.event.repository.private }}
         with:
-          tweet-message: "${{ github.event.head_commit.message }}. \n
+          tweet-message: " ${{ github.event.head_commit.message }}. \n
           ${{ github.event.repository.name }}. \n
           https://twitter.com/ImmutableOrg \n 
           #ImmutableOrganization #ethereum #Arbitrum
