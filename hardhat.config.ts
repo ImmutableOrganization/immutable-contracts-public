@@ -1,29 +1,24 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+require("dotenv").config();
 
 const config: HardhatUserConfig = {
   solidity: "0.8.17",
   networks: {
-    hardhat: {
-      allowUnlimitedContractSize: false,
-      initialBaseFeePerGas: 0,
+    arbitrum: {
+      url: 'https://arb1.arbitrum.io/rpc',
+      accounts: [process.env.PRIVATE_KEY || '']
     },
-    local: { url: "http://localhost:8545" },
-    // export the NODE_URL environment variable to use remote nodes like Alchemy or Infura. ge
-    // export NODE_URL=https://eth-mainnet.alchemyapi.io/v2/yourApiKey
-    ropsten: {
-      url: process.env.NODE_URL || "",
-    },
-    polygon_testnet: {
-      url: process.env.NODE_URL || "https://rpc-mumbai.maticvigil.com",
-    },
-    polygon_mainnet: {
-      url: process.env.NODE_URL || "https://rpc-mainnet.matic.quiknode.pro",
-    },
-    mainnet: {
-      url: process.env.NODE_URL || "https://main-light.eth.linkpool.io",
-    },
+    goerli: {
+      url: 'https://goerli.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161',
+      accounts: [process.env.PRIVATE_KEY || '']
+    }
   },
+  etherscan: {
+    apiKey: {
+      arbitrumOne: process.env.ARBISCAN_API_KEY || '',
+    }
+  }
 };
 
 export default config;

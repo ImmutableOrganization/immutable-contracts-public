@@ -1,22 +1,20 @@
 import { ethers } from "hardhat";
 
 async function main() {
-  const currentTimestampInSeconds = Math.round(Date.now() / 1000);
-  const ONE_YEAR_IN_SECS = 365 * 24 * 60 * 60;
-  const unlockTime = currentTimestampInSeconds + ONE_YEAR_IN_SECS;
+  const token = await ethers.getContractFactory("ImutableToken");
+  const tokenContract = await token.deploy();
+  await tokenContract.deployed();
 
-  const lockedAmount = ethers.utils.parseEther("1");
+  console.log("Token deployed to:", tokenContract.address);
 
-  const Lock = await ethers.getContractFactory("Lock");
-  const lock = await Lock.deploy(unlockTime, { value: lockedAmount });
 
-  await lock.deployed();
+  const Governor = await ethers.getContractFactory("ImmutableGovernor");
+  const governor = await Governor.deploy("0x17482Fae07cF2fF29233C4c4e29B5deF5130B7a1", "0x0000000000000000000000000000000000000000");
+  await governor.deployed();
 
-  console.log(`Lock with 1 ETH and unlock timestamp ${unlockTime} deployed to ${lock.address}`);
+  console.log("Governor deployed to:", governor.address);
 }
 
-// We recommend this pattern to be able to use async/await everywhere
-// and properly handle errors.
 main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
