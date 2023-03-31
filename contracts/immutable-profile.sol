@@ -60,6 +60,10 @@ contract ImmutableProfile is Ownable {
                 "Only owner can update data for other users"
             );
         }
+        
+         if (msg.sender != owner()) {
+            require(IERC721(_nftAddress).ownerOf(_tokenId) == msg.sender, "Caller must be the NFT owner");
+        }
 
         // If user not registered, add their address to the userAddresses array
         if (bytes(users[_userAddress].username).length == 0) {
