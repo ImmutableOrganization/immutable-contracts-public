@@ -37,7 +37,7 @@ contract ImmutableProfile is Ownable {
         address _userAddress,
         string memory _username,
         address _nftAddress,
-         uint256 _tokenId
+        uint256 _tokenId
     ) public onlyOwner {
         _setUserData(_userAddress, _username, _nftAddress, _tokenId);
     }
@@ -49,7 +49,7 @@ contract ImmutableProfile is Ownable {
         address _nftAddress,
         uint256 _tokenId
     ) internal {
-        if(!(_nftAddress == address(0) && _tokenId = -1)){
+        if(!(_nftAddress == address(0))){
         // Check if the given NFT address is a valid ERC721 contract
             require(
                 IERC721(_nftAddress).supportsInterface(type(IERC721).interfaceId),
