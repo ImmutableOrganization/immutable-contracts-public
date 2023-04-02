@@ -49,11 +49,13 @@ contract ImmutableProfile is Ownable {
         address _nftAddress,
         uint256 _tokenId
     ) internal {
+        if(!(_nftAddress == address(0) && _tokenId = -1)){
         // Check if the given NFT address is a valid ERC721 contract
-        require(
-            IERC721(_nftAddress).supportsInterface(type(IERC721).interfaceId),
-            "Invalid ERC721 contract address"
-        );
+            require(
+                IERC721(_nftAddress).supportsInterface(type(IERC721).interfaceId),
+                "Invalid ERC721 contract address"
+            );
+        }
 
         // When called by non-owner, ensure that the caller can only update their own data
         if (msg.sender != owner()) {
