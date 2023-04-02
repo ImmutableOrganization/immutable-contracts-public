@@ -26,26 +26,28 @@ contract ImmutableProfile is Ownable {
     );
 
     // Function to set or update user data
-    function setUserData(string memory _username, address _nftAddress) public {
+    function setUserData(string memory _username, address _nftAddress, uint256 _tokenId) public {
         require(!users[msg.sender].blocked, "User is blocked");
 
-        _setUserData(msg.sender, _username, _nftAddress);
+        _setUserData(msg.sender, _username, _nftAddress, _tokenId);
     }
 
     // Function for the owner to set or update user data
     function setUserDataByOwner(
         address _userAddress,
         string memory _username,
-        address _nftAddress
+        address _nftAddress,
+         uint256 _tokenId
     ) public onlyOwner {
-        _setUserData(_userAddress, _username, _nftAddress);
+        _setUserData(_userAddress, _username, _nftAddress, _tokenId);
     }
 
     // Internal function to set or update user data
     function _setUserData(
         address _userAddress,
         string memory _username,
-        address _nftAddress
+        address _nftAddress,
+        uint256 _tokenId
     ) internal {
         // Check if the given NFT address is a valid ERC721 contract
         require(
@@ -60,7 +62,7 @@ contract ImmutableProfile is Ownable {
                 "Only owner can update data for other users"
             );
         }
-        
+
          if (msg.sender != owner()) {
             require(IERC721(_nftAddress).ownerOf(_tokenId) == msg.sender, "Caller must be the NFT owner");
         }
