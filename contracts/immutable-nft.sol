@@ -10,8 +10,8 @@ import '@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol';
 contract ImmutableNFT is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Ownable {
   using SafeMath for uint256;
 
-  uint256 public constant MAX_SUPPLY = 100;
   uint256 public constant MAX_MINT_PER_TX = 5;
+  uint256 public RATE_OF_INCREASE = 0.000002 ether;
   uint256 public mintPrice = 0.001 ether;
   string public baseURI;
 
@@ -21,16 +21,15 @@ contract ImmutableNFT is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, O
 
   function mint(uint256 _numTokens, string[] memory _tokenURIs) public payable whenNotPaused {
     require(_numTokens > 0 && _numTokens <= MAX_MINT_PER_TX, 'Invalid number of tokens to mint');
-    require(totalSupply().add(_numTokens) <= MAX_SUPPLY, 'Minting would exceed max supply');
-    require(mintPrice.mul(_numTokens) <= msg.value, 'Insufficient payment');
     require(_numTokens == _tokenURIs.length, 'Token URIs length must match the number of tokens to mint');
 
     for (uint256 i = 0; i < _numTokens; i++) {
+      require(mintPrice <= msg.value, 'Insufficient payment');
+
       uint256 tokenId = totalSupply();
-      if (tokenId < MAX_SUPPLY) {
-        _safeMint(msg.sender, tokenId);
-        setTokenURI(tokenId, _tokenURIs[i]);
-      }
+      _safeMint(msg.sender, tokenId);
+      setTokenURI(tokenId, _tokenURIs[i]);
+      mintPrice = RATE_OF_INCREASE;
     }
   }
 
