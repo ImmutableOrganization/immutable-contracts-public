@@ -6,31 +6,37 @@ import '@openzeppelin/contracts/access/Ownable.sol';
 import '@openzeppelin/contracts/security/Pausable.sol';
 import '@openzeppelin/contracts/utils/math/SafeMath.sol';
 import '@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol';
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract ImmutableNFT is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, Ownable {
-  using SafeMath for uint256;
+    using SafeMath for uint256;
 
-  uint256 public constant MAX_MINT_PER_TX = 5;
-  uint256 public RATE_OF_INCREASE = 0.000002 ether;
-  uint256 public mintPrice = 0.001 ether;
-  string public baseURI;
+
+    uint256 public constant MAX_MINT_PER_TX = 10;
+    uint256 public constant MAX_SUPPLY = 687;
+    uint256 public mintPrice = 0.00 ether;
+    string public baseURI;
+
 
   constructor(string memory _name, string memory _symbol, string memory _baseURI) ERC721(_name, _symbol) {
     baseURI = _baseURI;
+    mint(10);
+    mint(10);
+    mint(10);
+    mint(3);
   }
 
-  function mint(uint256 _numTokens, string[] memory _tokenURIs) public payable whenNotPaused {
-    require(_numTokens > 0 && _numTokens <= MAX_MINT_PER_TX, 'Invalid number of tokens to mint');
-    require(_numTokens == _tokenURIs.length, 'Token URIs length must match the number of tokens to mint');
-
-    for (uint256 i = 0; i < _numTokens; i++) {
-      require(mintPrice <= msg.value, 'Insufficient payment');
-
-      uint256 tokenId = totalSupply();
-      _safeMint(msg.sender, tokenId);
-      setTokenURI(tokenId, _tokenURIs[i]);
-      mintPrice = RATE_OF_INCREASE;
-    }
+  function mint(uint256 _n) public payable whenNotPaused {
+        require(_n > 0 && _n <= MAX_MINT_PER_TX, "Invalid number of tokens to mint");
+        require(totalSupply().add(_n) <= MAX_SUPPLY, 'Minting would exceed max supply');
+        require(mintPrice.mul(_n)  <= msg.value, 'Insufficient payment');
+        for (uint256 i = 0; i < _n; i++) {
+            uint256 tokenId = totalSupply();
+            if (tokenId < MAX_SUPPLY) {
+               _safeMint(msg.sender, tokenId);
+                setTokenURI(tokenId, Strings.toString(tokenId));
+            }
+        }       
   }
 
   function setTokenURI(uint256 tokenId, string memory tokenURI) public onlyOwner {
