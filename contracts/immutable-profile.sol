@@ -9,6 +9,7 @@ contract ImmutableProfile is Ownable {
     struct User {
         string username;
         address nftAddress;
+        uint256 tokenID;
         bool blocked;
     }
 
@@ -22,7 +23,8 @@ contract ImmutableProfile is Ownable {
     event UserDataUpdated(
         address indexed userAddress,
         string username,
-        address indexed nftAddress
+        address indexed nftAddress,
+        uint256 indexed tokenID
     );
 
     // Function to set or update user data
@@ -78,11 +80,12 @@ contract ImmutableProfile is Ownable {
         users[_userAddress] = User(
             _username,
             _nftAddress,
+            _tokenId,
             users[_userAddress].blocked
         );
 
         // Emit the event with updated user data
-        emit UserDataUpdated(_userAddress, _username, _nftAddress);
+        emit UserDataUpdated(_userAddress, _username, _nftAddress, _tokenId);
     }
 
     // Function to get user data
@@ -95,7 +98,7 @@ contract ImmutableProfile is Ownable {
 
     // Function for the owner to block a user and reset their profile
     function blockAndResetUserProfile(address _userAddress) public onlyOwner {
-        users[_userAddress] = User("", address(0), true);
+        users[_userAddress] = User("", address(0), 0, true);
     }
 
     // Function to get all user profiles with pagination (100 profiles per page)
