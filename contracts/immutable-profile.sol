@@ -91,9 +91,9 @@ contract ImmutableProfile is Ownable {
     // Function to get user data
     function getUserData(
         address _userAddress
-    ) public view returns (string memory, address, bool) {
+    ) public view returns (string memory, address, bool, uint256) {
         User storage user = users[_userAddress];
-        return (user.username, user.nftAddress, user.blocked);
+        return (user.username, user.nftAddress, user.blocked, user.tokenID);
     }
 
     // Function for the owner to block a user and reset their profile
