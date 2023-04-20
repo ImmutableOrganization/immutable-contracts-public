@@ -27,11 +27,18 @@ contract ImmutableProfile is Ownable {
         uint256 indexed tokenID
     );
 
-    // Function to set or update user data
-    function setUserData(string memory _username, address _nftAddress, uint256 _tokenId) public {
+    // Function to set or update username
+    function setUsername(string memory _username) public {
         require(!users[msg.sender].blocked, "User is blocked");
 
-        _setUserData(msg.sender, _username, _nftAddress, _tokenId);
+        _setUsername(msg.sender, _username);
+    }
+
+    // Function to set or update user NFT
+    function setUserNFT(address _nftAddress, uint256 _tokenId) public {
+        require(!users[msg.sender].blocked, "User is blocked");
+
+        _setUserNFT(msg.sender, _nftAddress, _tokenId);
     }
 
     // Function for the owner to set or update user data
@@ -41,25 +48,44 @@ contract ImmutableProfile is Ownable {
         address _nftAddress,
         uint256 _tokenId
     ) public onlyOwner {
-        _setUserData(_userAddress, _username, _nftAddress, _tokenId);
+        _setUsername(_userAddress, _username);
+        _setUserNFT(_userAddress, _nftAddress, _tokenId);
     }
 
-    // Internal function to set or update user data
-    function _setUserData(
+    // Internal function to set or update username
+    function _setUsername(
         address _userAddress,
-        string memory _username,
+        string memory _username
+    ) internal {
+        if (bytes(users[_userAddress].username).length == 0) {
+            userAddresses.push(_userAddress);
+        }
+
+        users[_userAddress].username = _username;
+
+        emit UserDataUpdated(
+            _userAddress,
+            _username,
+            users[_userAddress].nftAddress,
+            users[_userAddress].tokenID
+        );
+    }
+
+    // Internal function to set or update user NFT
+    function _setUserNFT(
+        address _userAddress,
         address _nftAddress,
         uint256 _tokenId
     ) internal {
-        if(!(_nftAddress == address(0))){
-        // Check if the given NFT address is a valid ERC721 contract
+        if (!(_nftAddress == address(0))) {
             require(
-                IERC721(_nftAddress).supportsInterface(type(IERC721).interfaceId),
+                IERC721(_nftAddress).supportsInterface(
+                    type(IERC721).interfaceId
+                ),
                 "Invalid ERC721 contract address"
             );
         }
 
-        // When called by non-owner, ensure that the caller can only update their own data
         if (msg.sender != owner()) {
             require(
                 msg.sender == _userAddress,
@@ -67,25 +93,22 @@ contract ImmutableProfile is Ownable {
             );
         }
 
-         if (msg.sender != owner()) {
-            require(IERC721(_nftAddress).ownerOf(_tokenId) == msg.sender, "Caller must be the NFT owner");
+        if (msg.sender != owner()) {
+            require(
+                IERC721(_nftAddress).ownerOf(_tokenId) == msg.sender,
+                "Caller must be the NFT owner"
+            );
         }
 
-        // If user not registered, add their address to the userAddresses array
-        if (bytes(users[_userAddress].username).length == 0) {
-            userAddresses.push(_userAddress);
-        }
+        users[_userAddress].nftAddress = _nftAddress;
+        users[_userAddress].tokenID = _tokenId;
 
-        // Update user data in the mapping
-        users[_userAddress] = User(
-            _username,
+        emit UserDataUpdated(
+            _userAddress,
+            users[_userAddress].username,
             _nftAddress,
-            _tokenId,
-            users[_userAddress].blocked
+            _tokenId
         );
-
-        // Emit the event with updated user data
-        emit UserDataUpdated(_userAddress, _username, _nftAddress, _tokenId);
     }
 
     // Function to get user data
