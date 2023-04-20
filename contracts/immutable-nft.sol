@@ -33,8 +33,8 @@ contract ImmutableNFT is ERC721, ERC721Enumerable, ERC721URIStorage, Pausable, O
         for (uint256 i = 0; i < _n; i++) {
             uint256 tokenId = totalSupply();
             if (tokenId < MAX_SUPPLY) {
-               _safeMint(msg.sender, tokenId);
-                setTokenURI(tokenId, Strings.toString(tokenId));
+                _safeMint(msg.sender, tokenId);
+                _setTokenURI(tokenId, Strings.toString(tokenId));
             }
         }       
   }
