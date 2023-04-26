@@ -9,6 +9,11 @@ contract ImmutableDividends {
 
     // needs to be ownable contract
 
+    // also lp cant claim dividends, this
+    // means we must have a lp claim dividends function?
+    // or maybe after dividend period we auto send to LP?
+    // idk the game theory
+
     // callable by only the DAO
     function sendToLP() public {
         // send to LP
