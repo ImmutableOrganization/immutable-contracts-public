@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.19;
 
-import "./ImutableToken.sol";
+import "./immutable-token.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 
 contract ImmutableTreasury is Ownable, ReentrancyGuard {
+    // prob do a security audit again
+
     // how does this work
     // immutable governer owns this contract
     // Treasury owns NFT contract plus gaming conract
@@ -20,13 +22,6 @@ contract ImmutableTreasury is Ownable, ReentrancyGuard {
     // then balance will be sent to this contract
     // token holders will then be able to either claim their share of the dividends or have it sent to LP
     // maybe the claim dividends function and send to lp function have a lock and this can be controlled by the DAO, so people cant just claim whenever
-
-    // needs to be ownable contract
-
-    // also lp cant claim dividends, this
-    // means we must have a lp claim dividends function?
-    // or maybe after dividend period we auto send to LP?
-    // idk the game theory
 
     // callable by only the DAO
 
@@ -42,6 +37,7 @@ contract ImmutableTreasury is Ownable, ReentrancyGuard {
 
     // This is in place incase of a hostile takeover before we are complete
     // worry about it too much
+    // what about the contracts that this contract owns? how do i transfer ownership away??
     function withdrawToKillSwitch() public {
         require(msg.sender == killSwitch);
         selfdestruct(payable(msg.sender));

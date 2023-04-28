@@ -8,10 +8,16 @@ async function main() {
   // console.log("Token deployed to:", tokenContract.address);
 
 
-  const ImmutableProfile = await ethers.getContractFactory("ImmutableProfile");
-  const profile = await ImmutableProfile.deploy();
-  await profile.deployed();
-  console.log("ImmutableProfile deployed to:", profile.address);
+  // const ImmutableProfile = await ethers.getContractFactory("ImmutableProfile");
+  // const profile = await ImmutableProfile.deploy();
+  // await profile.deployed();
+  // console.log("ImmutableProfile deployed to:", profile.address);
+
+  const ImmutableDividend = await ethers.getContractFactory("ImmutableDividend");
+  const dividend = await ImmutableDividend.deploy();
+  await dividend.deployed();
+  console.log("ImmutableDividend deployed to:", dividend.address);
+
 
 }
 
