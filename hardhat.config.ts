@@ -3,7 +3,8 @@ import "@nomicfoundation/hardhat-toolbox";
 require("dotenv").config();
 
 const config: HardhatUserConfig = {
-  solidity: "0.8.17",
+  solidity: "0.8.2",
+
   networks: {
     arbitrum: {
       url: 'https://arb1.arbitrum.io/rpc',
