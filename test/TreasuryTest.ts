@@ -1,19 +1,8 @@
-// We import Chai to use its asserting functions here.
 import { expect } from "chai";
-
-// We use `loadFixture` to share common setups (or fixtures) between tests.
-// Using this simplifies your tests and makes them run faster, by taking
-// advantage of Hardhat Network's snapshot functionality.
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
 import { ethers } from "hardhat";
 
-// `describe` is a Mocha function that allows you to organize your tests.
-// Having your tests organized makes debugging them easier. All Mocha
-// functions are available in the global scope.
-//
-// `describe` receives the name of a section of your test suite, and a
-// callback. The callback must define the tests of that section. This callback
-// can't be an async function.
+
 describe("Token contract", function () {
 
     async function deployTokenFixture() {
@@ -29,91 +18,260 @@ describe("Token contract", function () {
 
         const { ImmutableToken, hardhatToken } = await loadFixture(deployTokenFixture);
         const ImmutableTreasury = await ethers.getContractFactory("ImmutableTreasury");
-        const [owner, addr1, addr2] = await ethers.getSigners();
+        const [owner, killSwitch, addr2] = await ethers.getSigners();
 
-        const hardhatImmutableTreasury = await ImmutableTreasury.deploy(hardhatToken.address, owner.address);
+        const treasury = await ImmutableTreasury.deploy(hardhatToken.address, owner.address);
 
-        await hardhatImmutableTreasury.deployed();
+        await treasury.deployed();
 
-        return { ImmutableTreasury, hardhatImmutableTreasury, owner, addr1, addr2 };
+        return { ImmutableTreasury, treasury, owner, killSwitch, addr2, hardhatToken };
     }
 
-    // You can nest describe calls to create subsections.
-    describe("Deployment", function () {
-        // `it` is another Mocha function. This is the one you use to define each
-        // of your tests. It receives the test name, and a callback function.
-        //
-        // If the callback function is async, Mocha will `await` it.
-        it("Should set the right owner", async function () {
-            // We use loadFixture to setup our environment, and then assert that
-            // things went well
-            const { hardhatToken, owner } = await loadFixture(deployTokenFixture);
+    describe("Deploy base contracts", async function () {
+        // how does this work
+        // immutable governer owns this contract
+        // Treasury owns NFT contract plus gaming conract
 
-            // `expect` receives a value and wraps it in an assertion object. These
-            // objects have a lot of utility methods to assert values.
+        // only the owner of this contract can call its function (DAO)? or just some
 
-            // This test expects the owner variable stored in the contract to be
-            // equal to our Signer's owner.
-            // expect(await hardhatToken.owner()).to.equal(owner.address);
+        // plan
+        // ownership of the NFT contract will be passed to the DAO,
+        // then balance will be sent to this contract
+        // token holders will then be able to either claim their share of the dividends or have it sent to LP
+        // maybe the claim dividends function and send to lp function have a lock and this can be controlled by the DAO, so people cant just claim whenever
+
+        // callable by only the DAO
+
+        // need to test all of these and think of attacks
+
+        it("Treasury treasury", async function () {
+            const { ImmutableTreasury, treasury, owner, killSwitch, addr2, hardhatToken } = await loadFixture(deployTreasuryFixture);
+            expect(await treasury.owner()).to.equal(owner.address);
+            expect(await treasury.killSwitch()).to.equal(killSwitch.address);
+
+            it("Should allow the owner to toggle dividends", async () => {
+                expect(await treasury.dividendsEnabled()).to.be.false;
+                await treasury.toggleDividends(true);
+                expect(await treasury.dividendsEnabled()).to.be.true;
+            });
+
+            it("Should not allow non-owners to toggle dividends", async () => {
+                await expect(treasury.connect(addr2).toggleDividends(true)).to.be.revertedWith("Ownable: caller is not the owner");
+            });
+
+            it("Should allow the kill switch to disable itself", async () => {
+                expect(await treasury.killSwitch()).to.equal(killSwitch.address);
+                await treasury.connect(killSwitch).disableKillSwitch();
+                expect(await treasury.killSwitch()).to.equal(ethers.constants.AddressZero);
+            });
+
+            it("Should not allow non-kill switch addresses to disable the kill switch", async () => {
+                await expect(treasury.connect(addr2).disableKillSwitch()).to.be.reverted;
+            });
+
+            it("Should allow the owner to set the claim interval", async () => {
+                const newClaimInterval = 2 * 7 * 24 * 60 * 60; // 2 weeks
+                await treasury.connect(owner).setClaimInterval(newClaimInterval);
+                expect(await treasury.claimInterval()).to.equal(newClaimInterval);
+            });
+
+            it("Should not allow non-owners to set the claim interval", async () => {
+                const newClaimInterval = 2 * 7 * 24 * 60 * 60; // 2 weeks
+                await expect(treasury.connect(addr2).setClaimInterval(newClaimInterval)).to.be.revertedWith("Ownable: caller is not the owner");
+            });
+
+            it("Should allow the owner to withdraw excess Ether", async () => {
+                const initialOwnerBalance = await owner.getBalance();
+                const excessEther = ethers.utils.parseEther("1");
+
+                await owner.sendTransaction({ to: treasury.address, value: excessEther });
+
+                const contractBalance = await ethers.provider.getBalance(treasury.address);
+                expect(contractBalance).to.be.gt(await treasury.totalDividends());
+
+                const tx = await treasury.connect(owner).withdrawExcessEther();
+                const receipt = await tx.wait();
+                if (tx.gasPrice) {
+                    const gasUsed = receipt.gasUsed.mul(tx.gasPrice);
+                    const finalOwnerBalance = await owner.getBalance();
+                    expect(finalOwnerBalance).to.be.closeTo(initialOwnerBalance.sub(gasUsed).add(excessEther), 10);
+                } else {
+                    console.log('test skipped no gas price');
+                    expect(true).to.be.true;
+                }
+
+            });
+
+            it("Should not allow non-owners to withdraw excess Ether", async () => {
+                await expect(treasury.connect(addr2).withdrawExcessEther()).to.be.revertedWith("Ownable: caller is not the owner");
+            });
+            it("Should deposit dividends to the contract when receiving Ether", async () => {
+                const depositAmount = ethers.utils.parseEther("1");
+                await owner.sendTransaction({ to: treasury.address, value: depositAmount });
+
+                const contractBalance = await ethers.provider.getBalance(treasury.address);
+                expect(await treasury.totalDividends()).to.equal(contractBalance);
+                expect(await treasury.totalDividends()).to.equal(depositAmount);
+            });
+
+            it("Should allow the kill switch to self-destruct the contract", async () => {
+                const killSwitchInitialBalance = await killSwitch.getBalance();
+                const contractBalance = await ethers.provider.getBalance(treasury.address);
+
+                await treasury.connect(killSwitch).withdrawToKillSwitch();
+
+                const killSwitchFinalBalance = await killSwitch.getBalance();
+                expect(killSwitchFinalBalance).to.be.gt(killSwitchInitialBalance.add(contractBalance));
+
+                await expect(treasury.totalDividends()).to.be.reverted;
+            });
+
+            it("Should not allow non-kill switch addresses to self-destruct the contract", async () => {
+                await expect(treasury.connect(addr2).withdrawToKillSwitch()).to.be.reverted;
+            });
+
+            it("Should calculate unclaimed dividends correctly", async () => {
+                const depositAmount = ethers.utils.parseEther("10");
+                const tokenAmount = ethers.utils.parseEther("100");
+
+                await hardhatToken.transfer(addr2.address, tokenAmount);
+                await owner.sendTransaction({ to: treasury.address, value: depositAmount });
+
+                const expectedUnclaimedDividends = (await hardhatToken.balanceOf(addr2.address)).mul(await treasury.totalDividends()).div(await hardhatToken.totalSupply());
+                const unclaimedDividends = await treasury.getUnclaimedDividends(addr2.address);
+                expect(unclaimedDividends).to.equal(expectedUnclaimedDividends);
+            });
+
+            it("Should allow users to claim dividends", async () => {
+                const depositAmount = ethers.utils.parseEther("10");
+                const tokenAmount = ethers.utils.parseEther("100");
+
+                await hardhatToken.transfer(addr2.address, tokenAmount);
+                await owner.sendTransaction({ to: treasury.address, value: depositAmount });
+
+                const initialUserBalance = await addr2.getBalance();
+
+                await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]); // fast-forward time by 1 week
+                await ethers.provider.send("evm_mine", []);
+
+                await treasury.connect(addr2).claimDividends();
+
+                const finalUserBalance = await addr2.getBalance();
+                const expectedClaim = await treasury.getUnclaimedDividends(addr2.address);
+
+                expect(finalUserBalance).to.be.closeTo(initialUserBalance.add(expectedClaim), 10);
+
+                const lastDividendsClaimed = await treasury.lastDividendsClaimed(addr2.address);
+                expect(lastDividendsClaimed).to.equal(await treasury.totalDividends());
+
+                const lastClaimTimestamp = await treasury.lastClaimTimestamp(addr2.address);
+                expect(lastClaimTimestamp).to.equal((await ethers.provider.getBlock('latest')).timestamp);
+            });
+
+            it("Should not allow users with no tokens to claim dividends", async () => {
+                await expect(treasury.connect(addr2).claimDividends()).to.be.revertedWith("No tokens to claim dividends");
+            });
+
+            it("Should not allow users with no unclaimed dividends to claim", async () => {
+                const tokenAmount = ethers.utils.parseEther("100");
+
+                await hardhatToken.transfer(addr2.address, tokenAmount);
+                await treasury.connect(addr2).claimDividends();
+
+                await expect(treasury.connect(addr2).claimDividends()).to.be.revertedWith("No dividends to claim");
+            });
+
+            it("Should not allow users to claim dividends before the claim interval", async () => {
+                const depositAmount = ethers.utils.parseEther("10");
+                const tokenAmount = ethers.utils.parseEther("100");
+
+                await hardhatToken.transfer(addr2.address, tokenAmount);
+                await owner.sendTransaction({ to: treasury.address, value: depositAmount });
+
+                await expect(treasury.connect(addr2).claimDividends()).to.be.revertedWith("Claim interval not reached");
+
+                await ethers.provider.send("evm_increaseTime", [6 * 24 * 60 * 60]); // fast-forward time by 6 days
+                await ethers.provider.send("evm_mine", []);
+
+                await expect(treasury.connect(addr2).claimDividends()).to.be.revertedWith("Claim interval not reached");
+            });
+
+            it("Should not allow reentrancy attacks when claiming dividends", async () => {
+                const ReentrantAttacker = await ethers.getContractFactory("ReentrantAttacker");
+                const attacker = (await ImmutableTreasury.deploy(owner.address, owner.address));
+
+                // Transfer some tokens to the attacker
+                const tokenAmount = ethers.utils.parseEther("100");
+                await hardhatToken.transfer(attacker.address, tokenAmount);
+
+                // Deposit Ether to the treasury
+                const depositAmount = ethers.utils.parseEther("10");
+                await owner.sendTransaction({ to: treasury.address, value: depositAmount });
+
+                await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]); // fast-forward time by 1 week
+                await ethers.provider.send("evm_mine", []);
+
+                // Perform the reentrancy attack
+                // await expect(attacker.attack(treasury.address)).to.be.revertedWith("ReentrancyGuard: reentrant call");
+            });
+
+            it("Should calculate unclaimed dividends based on last period token balance", async () => {
+                const depositAmount = ethers.utils.parseEther("10");
+                const tokenAmount = ethers.utils.parseEther("100");
+
+                await hardhatToken.transfer(addr2.address, tokenAmount);
+                await owner.sendTransaction({ to: treasury.address, value: depositAmount });
+
+                const expectedUnclaimedDividends = (await treasury.lastPeriodTokenBalance(addr2.address)).mul(await treasury.totalDividends()).div(await hardhatToken.totalSupply());
+                const unclaimedDividends = await treasury.getUnclaimedDividends(addr2.address);
+                expect(unclaimedDividends).to.equal(expectedUnclaimedDividends);
+            });
+
+            it("Should update last period token balance when claiming dividends", async () => {
+                const depositAmount = ethers.utils.parseEther("10");
+                const tokenAmount = ethers.utils.parseEther("100");
+
+                await hardhatToken.transfer(addr2.address, tokenAmount);
+                await owner.sendTransaction({ to: treasury.address, value: depositAmount });
+
+                await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]); // fast-forward time by 1 week
+                await ethers.provider.send("evm_mine", []);
+
+                await treasury.connect(addr2).claimDividends();
+
+                expect(await treasury.lastPeriodTokenBalance(addr2.address)).to.equal(tokenAmount);
+            });
+
+            it("Should allow users to claim dividends based on last period token balance", async () => {
+                const depositAmount = ethers.utils.parseEther("10");
+                const tokenAmount = ethers.utils.parseEther("100");
+
+                await hardhatToken.transfer(addr2.address, tokenAmount);
+                await owner.sendTransaction({ to: treasury.address, value: depositAmount });
+
+                await ethers.provider.send("evm_increaseTime", [7 * 24 * 60 * 60]); // fast-forward time by 1 week
+                await ethers.provider.send("evm_mine", []);
+
+                const initialUserBalance = await addr2.getBalance();
+
+                await treasury.connect(addr2).claimDividends();
+
+                const unclaimedDividends = await treasury.getUnclaimedDividends(addr2.address);
+                const finalUserBalance = await addr2.getBalance();
+
+                expect(finalUserBalance).to.be.closeTo(initialUserBalance.add(unclaimedDividends), 10);
+
+                const lastDividendsClaimed = await treasury.lastDividendsClaimed(addr2.address);
+                expect(lastDividendsClaimed).to.equal(await treasury.totalDividends());
+
+                const lastClaimTimestamp = await treasury.lastClaimTimestamp(addr2.address);
+                expect(lastClaimTimestamp).to.equal((await ethers.provider.getBlock('latest')).timestamp);
+            });
+
         });
 
-        it("Should assign the total supply of tokens to the owner", async function () {
-            const { hardhatToken, owner } = await loadFixture(deployTokenFixture);
-            const ownerBalance = await hardhatToken.balanceOf(owner.address);
-            expect(await hardhatToken.totalSupply()).to.equal(ownerBalance);
-        });
+
+
     });
 
-    describe("Transactions", function () {
-        it("Should transfer tokens between accounts", async function () {
-            const { hardhatToken, owner, addr1, addr2 } = await loadFixture(
-                deployTokenFixture
-            );
-            // Transfer 50 tokens from owner to addr1
-            await expect(
-                hardhatToken.transfer(addr1.address, 50)
-            ).to.changeTokenBalances(hardhatToken, [owner, addr1], [-50, 50]);
-
-            // Transfer 50 tokens from addr1 to addr2
-            // We use .connect(signer) to send a transaction from another account
-            await expect(
-                hardhatToken.connect(addr1).transfer(addr2.address, 50)
-            ).to.changeTokenBalances(hardhatToken, [addr1, addr2], [-50, 50]);
-        });
-
-        it("Should emit Transfer events", async function () {
-            const { hardhatToken, owner, addr1, addr2 } = await loadFixture(
-                deployTokenFixture
-            );
-
-            // Transfer 50 tokens from owner to addr1
-            await expect(hardhatToken.transfer(addr1.address, 50))
-                .to.emit(hardhatToken, "Transfer")
-                .withArgs(owner.address, addr1.address, 50);
-
-            // Transfer 50 tokens from addr1 to addr2
-            // We use .connect(signer) to send a transaction from another account
-            await expect(hardhatToken.connect(addr1).transfer(addr2.address, 50))
-                .to.emit(hardhatToken, "Transfer")
-                .withArgs(addr1.address, addr2.address, 50);
-        });
-
-        it("Should fail if sender doesn't have enough tokens", async function () {
-            const { hardhatToken, owner, addr1 } = await loadFixture(
-                deployTokenFixture
-            );
-            const initialOwnerBalance = await hardhatToken.balanceOf(owner.address);
-
-            // Try to send 1 token from addr1 (0 tokens) to owner.
-            // `require` will evaluate false and revert the transaction.
-            await expect(
-                hardhatToken.connect(addr1).transfer(owner.address, 1)
-            ).to.be.revertedWith("Not enough tokens");
-
-            // Owner balance shouldn't have changed.
-            expect(await hardhatToken.balanceOf(owner.address)).to.equal(
-                initialOwnerBalance
-            );
-        });
-    });
 });

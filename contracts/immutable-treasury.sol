@@ -5,48 +5,19 @@ import "./immutable-token.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract ImmutableTreasury is Ownable, ReentrancyGuard {
-    // prob do a security audit again
-
-    // how does this work
-    // immutable governer owns this contract
-    // Treasury owns NFT contract plus gaming conract
-
-    // only the owner of this contract can call its function (DAO)? or just some
+    // Consider performing a security audit
 
     bool public dividendsEnabled = false;
 
-    // plan
-    // ownership of the NFT contract will be passed to the DAO,
-    // then balance will be sent to this contract
-    // token holders will then be able to either claim their share of the dividends or have it sent to LP
-    // maybe the claim dividends function and send to lp function have a lock and this can be controlled by the DAO, so people cant just claim whenever
-
-    // callable by only the DAO
-
-    // need to test all of these and think of attacks
-
-    function toggleDividends(bool toggle) public {
-        // toggle dividends
+    function toggleDividends(bool toggle) public onlyOwner {
+        // Toggle dividends
         dividendsEnabled = toggle;
     }
 
-    // need a kill switch address that my wallet can call to what?
     address public killSwitch;
-
-    // This is in place incase of a hostile takeover before we are complete
-    // worry about it too much
-    // what about the contracts that this contract owns? how do i transfer ownership away??
-    function withdrawToKillSwitch() public {
-        require(msg.sender == killSwitch);
-        selfdestruct(payable(msg.sender));
-    }
-
-    function removeKillSwitch() public {
-        require(msg.sender == killSwitch);
-        killSwitch = address(0);
-    }
 
     ImutableToken public token;
     uint256 public totalDividends;
@@ -55,6 +26,7 @@ contract ImmutableTreasury is Ownable, ReentrancyGuard {
 
     mapping(address => uint256) public lastDividendsClaimed;
     mapping(address => uint256) public lastClaimTimestamp;
+    mapping(address => uint256) public lastPeriodTokenBalance;
 
     event DividendsDeposited(address indexed depositor, uint256 amount);
     event DividendsClaimed(address indexed claimer, uint256 amount);
@@ -74,10 +46,22 @@ contract ImmutableTreasury is Ownable, ReentrancyGuard {
         emit DividendsDeposited(msg.sender, msg.value);
     }
 
+    function withdrawToKillSwitch() public {
+        require(msg.sender == killSwitch);
+        // Implement a time lock or multi-signature mechanism for added security
+        selfdestruct(payable(msg.sender));
+    }
+
+    function disableKillSwitch() public {
+        require(msg.sender == killSwitch);
+        killSwitch = address(0);
+    }
+
     function claimDividends() external nonReentrant {
         uint256 tokenBalance = token.balanceOf(msg.sender);
         require(tokenBalance > 0, "No tokens to claim dividends");
 
+        // Calculate the dividends based on the token balance from the last period
         uint256 unclaimedDividends = getUnclaimedDividends(msg.sender);
         require(unclaimedDividends > 0, "No dividends to claim");
 
@@ -86,6 +70,8 @@ contract ImmutableTreasury is Ownable, ReentrancyGuard {
             "Claim interval not reached"
         );
 
+        // Update the last period token balance and other data
+        lastPeriodTokenBalance[msg.sender] = tokenBalance;
         lastDividendsClaimed[msg.sender] = totalDividends;
         lastClaimTimestamp[msg.sender] = block.timestamp;
 
@@ -96,10 +82,12 @@ contract ImmutableTreasury is Ownable, ReentrancyGuard {
     function getUnclaimedDividends(
         address account
     ) public view nonZeroAddress(account) returns (uint256) {
-        uint256 tokenBalance = token.balanceOf(account);
+        uint256 lastPeriodBalance = lastPeriodTokenBalance[account];
         uint256 lastClaimed = lastDividendsClaimed[account];
         uint256 newDividends = totalDividends - lastClaimed;
-        return (tokenBalance * newDividends) / token.totalSupply();
+
+        // Calculate the dividends based on the last period token balance
+        return (lastPeriodBalance * newDividends) / token.totalSupply();
     }
 
     function setClaimInterval(uint256 _claimInterval) external onlyOwner {
