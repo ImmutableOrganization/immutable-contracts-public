@@ -7,8 +7,16 @@ import "@openzeppelin/contracts/governance/extensions/GovernorCountingSimple.sol
 import "@openzeppelin/contracts/governance/extensions/GovernorVotes.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorVotesQuorumFraction.sol";
 
-contract ImmutableGovernor is Governor, GovernorSettings, GovernorCountingSimple, GovernorVotes, GovernorVotesQuorumFraction {
-    constructor(IVotes _token)
+contract ImmutableGovernor is
+    Governor,
+    GovernorSettings,
+    GovernorCountingSimple,
+    GovernorVotes,
+    GovernorVotesQuorumFraction
+{
+    constructor(
+        IVotes _token
+    )
         Governor("Immutable Governor")
         GovernorSettings(1 /* 1 block */, 14400 /* 2 days */, 50000e18)
         GovernorVotes(_token)
@@ -35,7 +43,9 @@ contract ImmutableGovernor is Governor, GovernorSettings, GovernorCountingSimple
         return super.votingPeriod();
     }
 
-    function quorum(uint256 blockNumber)
+    function quorum(
+        uint256 blockNumber
+    )
         public
         view
         override(IGovernor, GovernorVotesQuorumFraction)

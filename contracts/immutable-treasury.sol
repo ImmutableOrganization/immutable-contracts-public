@@ -1,105 +1,129 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.2;
 
-import "./immutable-token.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "./ImutableToken.sol";
 
-contract ImmutableTreasury is Ownable, ReentrancyGuard {
-    // Consider performing a security audit
-
-    bool public dividendsEnabled = false;
-
-    function toggleDividends(bool toggle) public onlyOwner {
-        // Toggle dividends
-        dividendsEnabled = toggle;
-    }
-
-    address public killSwitch;
+contract ImmutableTreasury is ReentrancyGuard, Pausable, Ownable {
+    using SafeERC20 for IERC20;
 
     ImutableToken public token;
-    uint256 public totalDividends;
+    address public killSwitch;
+    address public liquidityPoolAddress;
+    uint256 public liquidityPoolDividendPercentage;
 
-    uint256 public claimInterval = 1 weeks;
+    uint256 public totalDividends;
+    uint256 public unclaimedDividends;
+    uint256 public dividendsClaimDeadline;
 
     mapping(address => uint256) public lastDividendsClaimed;
-    mapping(address => uint256) public lastClaimTimestamp;
-    mapping(address => uint256) public lastPeriodTokenBalance;
 
-    event DividendsDeposited(address indexed depositor, uint256 amount);
-    event DividendsClaimed(address indexed claimer, uint256 amount);
+    event DividendsDeposited(uint256 amount);
+    event DividendsWithdrawn(uint256 amount);
+    event DividendsClaimed(address indexed account, uint256 amount);
 
-    modifier nonZeroAddress(address account) {
-        require(account != address(0), "Address is zero");
-        _;
-    }
-
-    constructor(ImutableToken _token, address _killSwitch) {
+    constructor(
+        ImutableToken _token,
+        address _killSwitch,
+        address _liquidityPoolAddress,
+        uint256 _liquidityPoolDividendPercentage
+    ) {
         token = _token;
         killSwitch = _killSwitch;
+        liquidityPoolAddress = _liquidityPoolAddress;
+        liquidityPoolDividendPercentage = _liquidityPoolDividendPercentage;
     }
 
     receive() external payable {
         totalDividends += msg.value;
-        emit DividendsDeposited(msg.sender, msg.value);
+        unclaimedDividends += msg.value;
+        emit DividendsDeposited(msg.value);
     }
 
-    function withdrawToKillSwitch() public {
-        require(msg.sender == killSwitch);
-        // Implement a time lock or multi-signature mechanism for added security
-        selfdestruct(payable(msg.sender));
+    function dividendsOwing(address account) public view returns (uint256) {
+        uint256 newDividends = totalDividends - lastDividendsClaimed[account];
+        uint256 tokenBalance = token.balanceOf(account);
+        uint256 totalTokenSupply = token.totalSupply();
+
+        return (tokenBalance * newDividends) / totalTokenSupply;
     }
 
-    function disableKillSwitch() public {
-        require(msg.sender == killSwitch);
-        killSwitch = address(0);
-    }
-
-    function claimDividends() external nonReentrant {
-        uint256 tokenBalance = token.balanceOf(msg.sender);
-        require(tokenBalance > 0, "No tokens to claim dividends");
-
-        // Calculate the dividends based on the token balance from the last period
-        uint256 unclaimedDividends = getUnclaimedDividends(msg.sender);
-        require(unclaimedDividends > 0, "No dividends to claim");
-
+    function claimDividends() external nonReentrant whenNotPaused {
         require(
-            block.timestamp >= lastClaimTimestamp[msg.sender] + claimInterval,
-            "Claim interval not reached"
+            block.timestamp <= dividendsClaimDeadline,
+            "Dividend claim deadline has passed"
         );
 
-        // Update the last period token balance and other data
-        lastPeriodTokenBalance[msg.sender] = tokenBalance;
+        uint256 owing = dividendsOwing(msg.sender);
+        require(owing > 0, "No dividends to claim");
+
         lastDividendsClaimed[msg.sender] = totalDividends;
-        lastClaimTimestamp[msg.sender] = block.timestamp;
+        unclaimedDividends -= owing;
+        payable(msg.sender).transfer(owing);
 
-        Address.sendValue(payable(msg.sender), unclaimedDividends);
-        emit DividendsClaimed(msg.sender, unclaimedDividends);
+        emit DividendsClaimed(msg.sender, owing);
     }
 
-    function getUnclaimedDividends(
-        address account
-    ) public view nonZeroAddress(account) returns (uint256) {
-        uint256 lastPeriodBalance = lastPeriodTokenBalance[account];
-        uint256 lastClaimed = lastDividendsClaimed[account];
-        uint256 newDividends = totalDividends - lastClaimed;
+    function withdrawUnclaimedDividends() external onlyOwner {
+        require(
+            block.timestamp > dividendsClaimDeadline,
+            "Dividend claim period is still active"
+        );
 
-        // Calculate the dividends based on the last period token balance
-        return (lastPeriodBalance * newDividends) / token.totalSupply();
+        uint256 amount = unclaimedDividends;
+        unclaimedDividends = 0;
+        payable(owner()).transfer(amount);
+
+        emit DividendsWithdrawn(amount);
     }
 
-    function setClaimInterval(uint256 _claimInterval) external onlyOwner {
-        claimInterval = _claimInterval;
+    function setKillSwitch(address newKillSwitch) external {
+        require(
+            msg.sender == killSwitch,
+            "Only the kill switch can change the kill switch address"
+        );
+        killSwitch = newKillSwitch;
     }
 
-    function withdrawExcessEther() external onlyOwner {
-        uint256 contractBalance = address(this).balance;
-        uint256 excess = contractBalance - totalDividends;
+    function executeKillSwitch() external {
+        require(
+            msg.sender == killSwitch,
+            "Only the kill switch can execute the kill switch"
+        );
+        selfdestruct(payable(killSwitch));
+    }
 
-        require(excess > 0, "No excess Ether to withdraw");
+    function pause() public onlyOwner {
+        _pause();
+    }
 
-        Address.sendValue(payable(owner()), excess);
+    function unpause() public onlyOwner {
+        _unpause();
+        dividendsClaimDeadline = block.timestamp + 1 days; // Set
+        // 24-hour deadline for claiming dividends when unpaused
+
+        uint256 lpDividends = calculateLiquidityPoolDividends();
+        require(
+            lpDividends <= unclaimedDividends,
+            "Not enough unclaimed dividends to transfer to liquidity pool"
+        );
+
+        lastDividendsClaimed[liquidityPoolAddress] = totalDividends;
+        unclaimedDividends -= lpDividends;
+        payable(liquidityPoolAddress).transfer(lpDividends);
+    }
+
+    function calculateLiquidityPoolDividends() private view returns (uint256) {
+        uint256 newDividends = totalDividends -
+            lastDividendsClaimed[liquidityPoolAddress];
+        uint256 tokenBalance = token.balanceOf(liquidityPoolAddress);
+        uint256 totalTokenSupply = token.totalSupply();
+        uint256 lpDividends = (tokenBalance * newDividends) / totalTokenSupply;
+
+        return (lpDividends * liquidityPoolDividendPercentage) / 100;
     }
 }
