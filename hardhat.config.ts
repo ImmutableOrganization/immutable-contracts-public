@@ -1,6 +1,7 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 require("dotenv").config();
+require("@nomiclabs/hardhat-ethers");
 
 const config: HardhatUserConfig = {
   solidity: "0.8.19",
